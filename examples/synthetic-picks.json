@@ -1,0 +1,17 @@
+[
+  {
+    "startCue": 1,
+    "endCue": 3,
+    "hook": "Half or quarter: which is bigger?",
+    "bucket": "Student explanation",
+    "scores": {"hook": 2, "evidence": 2, "payoff": 2, "clarity": 2, "relevance": 2},
+    "geography": {
+      "India": "An everyday example for English-medium numeracy creative.",
+      "US": "Test as a visual fraction reasoning challenge.",
+      "GCC": "Test with English-speaking parent audiences."
+    },
+    "flags": [],
+    "visualCheck": "Check that the learner or an authorized visual carries the explanation.",
+    "editorNotes": "Open with the fraction question, caption the pizza comparison, and finish on the learner's explanation and teacher's confirmation."
+  }
+]
