@@ -1,10 +1,10 @@
-const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+export const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char]);
 const list = (items) => items.length
   ? '<ul>' + items.map((item) => `<li>${escape(item)}</li>`).join('') + '</ul>'
   : '<p>None recorded.</p>';
-const statusText = {
+export const statusText = {
   'awaiting-picks': 'Awaiting prompt results',
   'zero-candidates': 'No candidate passed',
   candidates: 'Candidates found',
@@ -18,7 +18,33 @@ const checks = {
   privacy: 'Privacy and dignity', rights: 'Usage rights',
 };
 
-function reviewForm(id, decision) {
+const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
+
+export function assess(candidate, decision) {
+  const blockers = [];
+  if (candidate.preview.issue) blockers.push(candidate.preview.issue);
+  if (candidate.preview.file && !candidate.preview.audio) blockers.push('Preview has no audio track.');
+  if (!decision) return { status: 'pending', blockers: [...blockers, 'Reviewer decision pending.'] };
+  if (decision.status === 'rejected') {
+    if (!hasText(decision.reviewer) || !hasText(decision.reason)) {
+      throw new Error(`Rejected decision for ${candidate.id} requires reviewer and reason.`);
+    }
+    return { status: 'rejected', blockers: [decision.reason], reviewer: decision.reviewer };
+  }
+  if (decision.status !== 'review') throw new Error(`Unknown decision status for ${candidate.id}.`);
+  for (const check of Object.keys(checks)) {
+    const value = decision[check] ?? 'pending';
+    if (!['pass', 'pending', 'fail'].includes(value)) throw new Error(`Invalid ${check} check for ${candidate.id}.`);
+    if (value !== 'pass') blockers.push(`${check}: ${value}`);
+  }
+  for (const field of ['reviewer', 'notes', 'rightsReference']) {
+    if (!hasText(decision[field])) blockers.push(`${field} required.`);
+  }
+  const status = blockers.length ? 'pending' : 'ready';
+  return { status, blockers, reviewer: decision.reviewer, notes: decision.notes, rightsReference: decision.rightsReference };
+}
+
+function reviewForm(id, decision, save) {
   const option = (value, label, current) =>
     `<option value="${value}"${value === current ? ' selected' : ''}>${label}</option>`;
   return `<details class="review-form">
@@ -37,14 +63,15 @@ function reviewForm(id, decision) {
       <label>Rights register reference <input name="rightsReference" value="${escape(decision.rightsReference)}"></label>
       <label>Review notes <textarea name="notes">${escape(decision.notes)}</textarea></label>
       <label>Rejection reason <input name="reason" value="${escape(decision.reason)}"></label>
+      ${save ? '<div class="form-action"><button class="primary" type="submit">Save review</button><span role="status"></span></div>' : ''}
     </form>
   </details>`;
 }
 
-function card(candidate, decision) {
+export function card(candidate, decision, { mediaBase = '', save = false } = {}) {
   const { preview, review } = candidate;
   const media = preview.file
-    ? `<div class="playback"><video controls playsinline preload="metadata" src="${escape(preview.file)}"
+    ? `<div class="playback"><video controls playsinline preload="metadata" src="${escape(mediaBase + preview.file)}"
           data-start="${preview.cutStart.toFixed(3)}" data-end="${preview.cutEnd.toFixed(3)}"></video>
         <div class="buttons"><button type="button" data-play="cut">Play proposed cut</button>
         <button type="button" data-play="context">Play with context</button></div>
@@ -65,7 +92,7 @@ function card(candidate, decision) {
       ${review.reviewer ? `<p>Reviewer — ${escape(review.reviewer)}</p>` : ''}
       ${review.notes ? `<p>${escape(review.notes)}</p>` : ''}</div>
     </div>
-    ${reviewForm(candidate.id, decision)}
+    ${reviewForm(candidate.id, decision, save)}
     <details><summary>Candidate ID and scores</summary>
       <p><code>${escape(candidate.id)}</code></p>
       ${list(Object.entries(candidate.scores).map(([key, value]) => `${key} ${value}/2`))}

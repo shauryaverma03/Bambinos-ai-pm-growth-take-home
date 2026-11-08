@@ -5,10 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { milliseconds, parseVttText, prepare, validate } from './pipeline.mjs';
-import { renderReport, editorCsv } from './review-output.mjs';
+import { renderReport, editorCsv, assess } from './review-output.mjs';
 
-const checks = ['visual', 'audio', 'soundOff', 'privacy', 'rights'];
-const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 const json = (value) => JSON.stringify(value, null, 2) + '\n';
 
@@ -64,30 +62,6 @@ function makePreview(path, media, candidate, directory) {
   return { file, audio: media.audio, offset, duration, cutStart: start - offset, cutEnd: end - offset };
 }
 
-function assess(candidate, decision) {
-  const blockers = [];
-  if (candidate.preview.issue) blockers.push(candidate.preview.issue);
-  if (candidate.preview.file && !candidate.preview.audio) blockers.push('Preview has no audio track.');
-  if (!decision) return { status: 'pending', blockers: [...blockers, 'Reviewer decision pending.'] };
-  if (decision.status === 'rejected') {
-    if (!hasText(decision.reviewer) || !hasText(decision.reason)) {
-      throw new Error(`Rejected decision for ${candidate.id} requires reviewer and reason.`);
-    }
-    return { status: 'rejected', blockers: [decision.reason], reviewer: decision.reviewer };
-  }
-  if (decision.status !== 'review') throw new Error(`Unknown decision status for ${candidate.id}.`);
-  for (const check of checks) {
-    const value = decision[check] ?? 'pending';
-    if (!['pass', 'pending', 'fail'].includes(value)) throw new Error(`Invalid ${check} check for ${candidate.id}.`);
-    if (value !== 'pass') blockers.push(`${check}: ${value}`);
-  }
-  for (const field of ['reviewer', 'notes', 'rightsReference']) {
-    if (!hasText(decision[field])) blockers.push(`${field} required.`);
-  }
-  const status = blockers.length ? 'pending' : 'ready';
-  return { status, blockers, reviewer: decision.reviewer, notes: decision.notes, rightsReference: decision.rightsReference };
-}
-
 async function run(options) {
   const transcriptDir = resolve(options.transcripts);
   const names = (await readdir(transcriptDir)).filter((file) => file.endsWith('.vtt')).sort();
@@ -119,7 +93,9 @@ async function run(options) {
         await writeFile(join(staging, 'prompts', `${session}-${batch.batch}.txt`),
           `${prompt.trim()}\n\nTranscript input (JSON)\n\n${json(batch)}`);
       }
-      const rawPicks = await readOptional(join(resolve(options.picks), `${session}-picks.json`));
+      const picksName = `${session}-picks.json`;
+      const override = options.overrides && await readOptional(join(resolve(options.overrides), picksName));
+      const rawPicks = override ?? await readOptional(join(resolve(options.picks), picksName));
       let validated = { reviewQueue: [], rejected: [] };
       if (rawPicks !== undefined) {
         try {
@@ -191,7 +167,7 @@ async function run(options) {
 try {
   const defaults = {
     transcripts: 'assets/transcripts', videos: 'assets/videos', picks: 'runs',
-    output: 'runs', reviews: undefined,
+    output: 'runs', reviews: undefined, overrides: undefined,
   };
   const { values } = parseArgs({ options: Object.fromEntries(
     Object.entries(defaults).map(([name, value]) => [name, { type: 'string', default: value }]),

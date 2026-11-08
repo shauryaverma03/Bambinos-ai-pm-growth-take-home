@@ -2,7 +2,23 @@
 
 Prepare timestamped class transcripts for AI review, validate 10–20 second candidates, and review real footage before releasing any brief to an editor.
 
-## Run the official sample
+## Open the studio
+
+From the project folder, run:
+
+```sh
+node studio.mjs
+```
+
+Open [the local home page](http://127.0.0.1:4173/) and choose **Open dashboard**. The first launch prepares the official sample. Use **Run pipeline** after adding matching VTT and MP4 files to the local asset folders or importing new AI picks.
+
+- **Candidate queue** filters by session and review status, plays each cut and its context, and saves review decisions.
+- **Prompt inputs and picks** lists prompt batches for the manual AI step and accepts one JSON array per session. Imported picks override the sample picks on the next run.
+- **Editor handoff** downloads only briefs that clear all five checks and have a reviewer, notes, and a usage-rights reference.
+
+Studio picks, decisions, and runs stay in `runs/`. The studio listens only on loopback. Keep the terminal running while using it and use Ctrl+C to stop it.
+
+## Run the official sample from the CLI
 
 Requirements are Node.js 20+ and FFmpeg with `ffprobe` and `libx264` on PATH. The prototype needs no network connection or API key.
 
@@ -28,7 +44,7 @@ Each run writes a separate, complete snapshot. It includes:
 
 Override locations with `--transcripts DIR --videos DIR --picks DIR --output DIR`. The existing `node pipeline.mjs prepare FILE.vtt SESSION` and `node pipeline.mjs validate FILE.vtt PICKS.json` commands also work independently.
 
-## Review and hand off
+## Review and hand off from a standalone run
 
 1. In the browser, play each proposed cut and its context. Use **Record review decision** to document visual support, audio and timing, sound-off clarity, privacy and dignity, and usage rights. Enter reviewer notes and the rights register reference. Use **Reject candidate** with a reviewer and reason for excluded rows.
 2. Select **Download entered decisions**. Apply the JSON file with the same input options used to generate the page.
